@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>도트 미연시</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0d1426;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#3a2d3f;overflow:hidden}
+#app{position:relative;width:100%;max-width:480px;height:100%;margin:0 auto;overflow:hidden;background:#1d2a44}
+.scene{position:absolute;inset:0;display:none}
+.scene.on{display:block}
+canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;background:#000}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:70px;pointer-events:none;gap:14px}
+.ov>*{pointer-events:auto}
+#ttl{color:#ffe3ec;font-weight:900;font-size:34px;line-height:1.15;letter-spacing:2px;text-align:center;padding:12px 16px;text-shadow:3px 3px 0 #c2497a,6px 6px 0 #5b2a4e,9px 9px 0 rgba(0,0,0,.35);animation:bob 2.4s ease-in-out infinite}
+#ttl:before{content:'♥ ';color:#ff7aa8}
+#ttl:after{content:' ♥';color:#ff7aa8}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+#hint{color:#cfeaff;font-size:13px;text-shadow:1px 1px 0 #000;opacity:.8}
+#gname{position:absolute;top:10%;left:0;right:0;text-align:center;font-weight:bold;color:#fff;font-size:18px;text-shadow:2px 2px 0 #000;pointer-events:none}
+.btn{font-family:inherit;font-weight:bold;font-size:15px;background:#f4a6b7;color:#3a2d3f;border:3px solid #3a2d3f;box-shadow:3px 3px 0 #3a2d3f;border-radius:8px;padding:9px 14px;margin:4px;cursor:pointer}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #3a2d3f}
+.heart{font-size:22px;padding:14px 26px;background:#ffd6e0;border-radius:40px;opacity:0;transition:opacity 1.2s}
+.box{position:absolute;left:8px;right:8px;bottom:8px;max-height:46%;overflow:auto;background:#fdf6ec;border:3px solid #3a2d3f;border-radius:8px;padding:12px;font-size:15px;line-height:1.55;box-shadow:4px 4px 0 #0008}
+#txt{white-space:pre-wrap;min-height:40px}
+#btns{display:flex;flex-wrap:wrap}
+#btns.choice{flex-direction:column}
+#btns.choice .btn{width:100%;text-align:left;background:#fff8ec;margin:5px 0;box-shadow:2px 2px 0 #3a2d3f}
+#stageWrap{position:absolute;top:0;left:0;right:0;height:50%}
+#hud{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;align-items:center;font-size:13px;color:#fff;font-weight:bold;text-shadow:1px 1px 0 #000;z-index:2}
+#bar{flex:1;height:14px;background:#0008;border:2px solid #fff}
+#barf{height:100%;background:#f4a6b7;width:0;transition:width .4s}
+.panel{position:absolute;inset:0;background:rgba(18,18,36,.95);color:#fff;overflow:auto;padding:14px;display:none;z-index:9}
+.panel.on{display:block}
+.panel h2{margin:4px 0 10px;color:#ffd6e0}
+.panel h3{color:#a8e0d0;margin:14px 0 4px}
+.card{background:#2a2f4a;border:2px solid #9ec8f0;border-radius:8px;padding:10px;margin-bottom:10px;font-size:14px;line-height:1.5}
+.panel input,.panel textarea{width:100%;font-family:inherit;font-size:14px;margin:2px 0 8px;padding:6px;border:2px solid #3a2d3f;border-radius:6px;background:#fff;color:#000}
+.panel input[type=color]{width:60px;height:34px;padding:2px;display:inline-block;margin-right:8px}
+.panel label{font-size:13px;color:#a8e0d0;display:block}
+#fade{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .6s;pointer-events:none;z-index:50}
+</style></head>
+<body><div id="app">
+<div class="scene on" id="sea"><canvas id="cSea" width="240" height="360"></canvas>
+<div class="ov"><div id="ttl"></div><div id="hint">🔊 화면을 한 번 터치하면 바다 소리가 켜져요</div><button class="btn heart" id="startBtn"></button></div></div>
+<div class="scene" id="gate"><canvas id="cGate" width="240" height="360"></canvas><div id="gname"></div>
+<div class="box"><div id="gtxt"></div><button class="btn" id="enterBtn">교내로 들어가기 ▶</button></div></div>
+<div class="scene" id="main"><div id="stageWrap"><canvas id="cStage" width="240" height="180"></canvas></div>
+<div id="hud"><span id="turnT"></span><div id="bar"><div id="barf"></div></div><button class="btn" style="margin:0;padding:4px 10px" id="menuBtn">☰</button></div>
+<div class="box" id="box"><div id="txt"></div><div id="btns"></div></div></div>
+<div class="panel" id="panel"></div><div id="fade"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let EDIT=false;const ADMIN_PW='1234';
+const KEY='pixelMiyeonsi.settings',SKEY='pixelMiyeonsi.save';
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+/* 16x20 chibi sprite. O=outline H=hair h=hair shine S=skin E=eye W=eye shine B=blush M=mouth J=jacket K=shirt T=tie P=pants X=shoes */
+const ROWS=[
+".....OOOOOO.....",
+"...OOHHHHHHOO...",
+"..OHHhHHHHhHHO..",
+"..OHHHHHHHHHHO..",
+".OHHHHHHHHHHHHO.",
+".OHHSSSSSSSSHHO.",
+".OHSSESSSSESSHO.",
+".OHBSESSSSESSBHO",
+".OHSSSSSSSSSSHO.",
+"..OSSSSMMSSSSO..",
+"....OJJKTKJJO...",
+"....OJJKTKJJO...",
+"...OJJJKTKJJJO..",
+"...OJJJKKKJJJO..",
+"...OJJJJJJJJJO..",
+"....OPPPOPPPO...",
+"....OPPPOPPPO...",
+"....OPPPOPPPO...",
+"...OXXXO.OXXXO..",
+"..OXXXXO.OXXXXO."];
+const PRES=[[1,2],[2,3],[3],[1],[2,3],[3,1],[1,2,3]];
+const TITLES={admin:'🔒 관리자',dex:'캐릭터 도감',school:'학교 안내',mission:'미션 확인',rel:'인물 관계도',edit:'설정 및 정보 수정',save:'저장 및 불러오기'};
+const mk=(n,h,o,e,l)=>({name:n,age:'',grade:'',personality:'',speech:'',hobby:'',likes:'',dislikes:'',secret:'',intro:'설정에서 소개 문구를 입력하세요.',lines:l,hair:h,outfit:o,eye:e,skin:'#f8d9c4',img:''});
+const DEF={title:'도트 미연시',startLabel:'♡ START! ♡',startImg:'',maxTurn:60,mission:'네 명 모두 서로를 좋아하게 만드세요!',fail:'미션에 실패할 경우, 당신은 바다에 빠졌던 그 순간 그대로 목숨을 잃게 됩니다.',bg:'어두운 바다에서 눈을 뜬 당신, 그리고 예술고등학교.',rel:'',
+school:{name:'예술고등학교',intro:'설정 → 학교 소개에서 내용을 입력하세요.',history:'',atmos:'',rules:'',cautions:'',grades:'',special:'',clubs:'',council:'',teachers:''},
+locs:[['교실','창가 자리가 있는 우리 반.'],['복도','긴 복도. 사물함이 줄지어 있다.'],['옥상','바람이 부는 옥상.'],['음악실','피아노 소리가 새어 나온다.'],['미술실','물감 냄새가 난다.'],['운동장','넓은 운동장.'],['도서관','조용한 도서관.']].map(([n,d])=>({n,d})),
+chars:[mk('주인공','#7d5f4e','#7a1f2b','#4a2f2a','...여기가 어디야?\n오늘은 조용하네.\n아직 머리가 어지러워.'),mk('캐릭터 2','#e8d2a8','#7a1f2b','#6b4a2a','안녕? 너 처음 보는 얼굴이다.\n오늘 날씨 좋다.\n같이 다닐래?'),mk('캐릭터 3','#2b2233','#7a1f2b','#2b2233','...뭐야. 나 혼자 있고 싶은데.\n그래도 말은 걸어줘서 고마워.\n별로 신경 쓰진 마.'),mk('캐릭터 4','#2b2233','#5a2a40','#5a3a8a','어? 너 괜찮아?\n바다에서 올라온 사람은 처음 봐.\n점심 같이 먹을래?')]};
+const GF=[['title','게임 제목 및 소개','i'],['mission','미션 내용','a'],['fail','실패 문구','a'],['bg','게임 배경 문구','a'],['maxTurn','제한 턴 (숫자)','i'],['rel','캐릭터 간 관계 메모','a'],['school.name','학교 이름','i'],['school.intro','학교 소개','a'],['school.history','학교의 역사','a'],['school.atmos','학교 분위기','a'],['school.rules','교칙','a'],['school.cautions','주의사항','a'],['school.grades','학년 및 반','i'],['school.special','특별실','a'],['school.clubs','동아리','a'],['school.council','학생회','a'],['school.teachers','선생님 정보','a'],['chatter','캐릭터끼리 대화 (이름: 대사 형식, 빈 줄로 장면 구분)','a']];
+const CF=[['name','이름','i'],['age','나이','i'],['grade','학년','i'],['personality','성격','a'],['speech','말투','i'],['hobby','취미','i'],['likes','좋아하는 것','i'],['dislikes','싫어하는 것','i'],['secret','비밀','a'],['event','특별 이벤트 대사','a'],['datePlace','데이트 장소 (예: 영화관, 집, 바다)','i'],['dateScene','데이트 장면 글 (호감 80 이상일 때 둘이 떠나는 장면)','a'],['intro','소개 문구','a'],['lines','이벤트 대사 (한 줄에 하나씩, 자유 대사용)','a'],['events','대화 장면 (글로 쓰기)<br>이름: 대사 형식으로 한 줄씩 쓰세요<br>빈 줄을 넣으면 다음 장면<br>※ 로 시작하면 지문, > 로 시작하면 선택지<br>선택지 밑에 들여쓴 줄은 그 선택을 골랐을 때만 이어지는 대사<br>예) 주인공: 오늘 날씨 좋다.<br>민지: 응, 같이 갈래?<br>※ 둘이 나란히 걷는다','a']];
+const PAIRS=[[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+
+let S=JSON.parse(JSON.stringify(DEF));
+function merge(a,b){for(const k in b){if(b[k]&&typeof b[k]==='object'&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==='object')merge(a[k],b[k]);else a[k]=b[k]}}
+try{merge(S,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+const getP=p=>p.split('.').reduce((o,k)=>o?o[k]:undefined,S);
+function setP(p,v){const ks=p.split('.');let t=S;for(let i=0;i<ks.length-1;i++)t=t[ks[i]];t[ks[ks.length-1]]=v}
+const newAff=()=>{const m=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];PAIRS.forEach(([i,j])=>m[i][j]=m[j][i]=20);return m};
+const newG=()=>({turn:S.maxTurn,loc:0,aff:newAff(),seen:[],over:false});
+let G=newG();
+
+/* ---------- sprites ---------- */
+let imgs=[];
+const IMC=new Map();
+function getImg(src){if(!IMC.has(src)){const im=new Image();im.onload=()=>{drawStage();drawGate()};im.src=src;IMC.set(src,im)}return IMC.get(src)}
+function loadImgs(){}
+function applyStart(){const b=$('startBtn'),on=!!S.startImg;b.textContent=on?'':S.startLabel;b.style.backgroundImage=on?`url(${S.startImg})`:'';b.style.backgroundSize='100% 100%';b.style.width=on?'200px':'';b.style.height=on?'70px':'';b.style.color=on?'transparent':'';b.style.border=on?'none':'';b.style.boxShadow=on?'none':''}
+const off=document.createElement('canvas');off.width=16;off.height=20;const oc=off.getContext('2d');
+function pix(i){
+  const c=S.chars[i];
+  const p={O:'#2b2233',H:c.hair,h:'#ffffff55',S:c.skin,E:c.eye||'#2b2233',W:'#ffffff',B:'#f49ab0',M:'#b04a5a',J:c.outfit,K:'#f7f4f8',T:'#2b2233',P:'#3b3a4a',X:'#4a3228'};
+  oc.clearRect(0,0,16,20);
+  ROWS.forEach((r,y)=>[...r.padEnd(16,'.')].forEach((k,x)=>{if(k!=='.'&&p[k]){oc.fillStyle=p[k];oc.fillRect(x,y,1,1)}}));
+  if(Date.now()%3400<120){oc.fillStyle=p.S;[[5,6],[10,6],[5,7],[10,7]].forEach(([x,y])=>oc.fillRect(x,y,1,1))}else{oc.fillStyle='#fff';oc.fillRect(4,6,1,1);oc.fillRect(9,6,1,1)}
+  return off;
+}
+function sprite(ctx,i,x,y,s,ang=0,frame=0){
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang);const bt=Date.now()/500,bs=Math.sin(bt);ctx.scale(1+bs*.01,1+bs*.015);
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(0,0,6*s,1.4*s,0,0,7);ctx.fill();
+  const ex=exState.i===i&&Date.now()<exState.until&&S.chars[i].ex&&S.chars[i].ex[exState.k];const sr=ex||((frame&&S.chars[i].img2)||S.chars[i].img);const im=sr?getImg(sr):null;
+  if(im&&im.complete&&im.naturalWidth)ctx.drawImage(im,-8*s,-20*s,16*s,20*s);
+  else ctx.drawImage(pix(i),-8*s,-20*s,16*s,20*s);
+  ctx.restore();
+}
+
+/* ---------- sound ---------- */
+let AC=null,ambOn=false,ambG=null;
+const ac=()=>{if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();return AC};
+function sfx(f){try{const a=ac(),o=a.createOscillator(),g=a.createGain();o.frequency.value=f;g.gain.value=.04;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.07)}catch(e){}}
+function pop(){try{const a=ac(),t=a.currentTime,o=a.createOscillator(),g=a.createGain();const f=500+Math.random()*600;o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f*2.4,t+.09);g.gain.setValueAtTime(.06,t);g.gain.exponentialRampToValueAtTime(.001,t+.11);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+.12)}catch(e){}}
+function ambient(){
+  if(ambOn)return;ambOn=true;
+  const a=ac(),n=a.createBuffer(1,a.sampleRate*2,a.sampleRate),d=n.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const src=a.createBufferSource();src.buffer=n;src.loop=true;
+  const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=420;
+  const lfo=a.createOscillator(),lg=a.createGain();lfo.frequency.value=.2;lg.gain.value=180;lfo.connect(lg);lg.connect(f.frequency);lfo.start();
+  ambG=a.createGain();ambG.gain.value=.07;src.connect(f);f.connect(ambG);ambG.connect(a.destination);src.start();
+}
+document.addEventListener('pointerdown',()=>{try{ac().resume()}catch(e){}});
+
+/* ---------- sea (intro) ---------- */
+const sc=$('cSea').getContext('2d');sc.imageSmoothingEnabled=false;
+let T=0,bub=[],splash=[];
+function drawSea(){
+  T++;
+  const g=sc.createLinearGradient(0,0,0,360);g.addColorStop(0,'#2a4f7a');g.addColorStop(.5,'#12304f');g.addColorStop(1,'#050b18');
+  sc.fillStyle=g;sc.fillRect(0,0,240,360);
+  for(let y=30;y<360;y+=12){sc.fillStyle=`rgba(160,220,240,${.05+y/3000})`;for(let x=0;x<240;x+=8){const o=Math.round(Math.sin((T+x*2+y)/14)*2);sc.fillRect(x,y+o,6,1)}}
+  // rising bubbles (뽀글뽀글)
+  if(Math.random()<.3)bub.push({x:95+Math.random()*50,y:260+Math.random()*60,r:Math.random()<.6?2:3,v:.7+Math.random()*.9,w:Math.random()*6});
+  const seaOn=$('sea').classList.contains('on');if(seaOn&&Math.random()<.18)pop();
+  bub=bub.filter(b=>b.y>-6);
+  bub.forEach(b=>{b.y-=b.v;const x=Math.round(b.x+Math.sin(b.y/5+b.w)*2);sc.strokeStyle='#e2f7ff';sc.strokeRect(x,Math.round(b.y),b.r,b.r);sc.fillStyle='#ffffffaa';sc.fillRect(x,Math.round(b.y),1,1)});
+  // struggling swimmer: sinks & pops up, flails
+  const flail=T%40<8;
+  const bob=Math.round(Math.sin(T/22)*5)+(flail?-4:0);
+  const ang=Math.sin(T/7)*.5+(flail?.7*Math.sin(T):0);
+  if(T%5===0&&!flail)bub.push({x:112+Math.random()*16,y:190,r:2,v:.8,w:0});
+  sprite(sc,0,120,262+bob,5,ang*0.6,Math.floor(T/8)%2);
+  // water body + surface
+  sc.fillStyle='rgba(20,80,120,.42)';sc.fillRect(0,196,240,164);
+  sc.fillStyle='#cdefff';for(let x=0;x<240;x+=5)sc.fillRect(x,194+Math.round(Math.sin((T+x)/7)*2),4,2);
+  // splashes at surface when flailing
+  if(flail&&T%3===0)for(let k=0;k<3;k++)splash.push({x:100+Math.random()*40,y:192,vx:(Math.random()-.5)*2,vy:-1-Math.random()*1.5,l:14});
+  splash=splash.filter(p=>p.l>0);
+  splash.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.l--;sc.fillStyle='#e8faff';sc.fillRect(Math.round(p.x),Math.round(p.y),2,2)});
+  // vignette
+  const v=sc.createRadialGradient(120,180,60,120,180,200);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,10,.6)');
+  sc.fillStyle=v;sc.fillRect(0,0,240,360);
+  requestAnimationFrame(drawSea);
+}
+
+/* ---------- gate ---------- */
+const gc=$('cGate').getContext('2d');
+function drawGate(){
+  const c=gc;c.imageSmoothingEnabled=false;
+  const gi=S.school.img&&getImg(S.school.img);
+  if(gi&&gi.complete&&gi.naturalWidth){c.drawImage(gi,0,0,240,360);$('gname').textContent=S.school.name;$('gtxt').textContent=S.school.intro;return}
+  c.fillStyle='#bfe6f5';c.fillRect(0,0,240,360);
+  c.fillStyle='#fff3c9';c.beginPath();c.arc(120,90,10,0,7);c.fill();
+  c.fillStyle='#b6e3b0';c.fillRect(0,250,240,110);
+  c.fillStyle='#d9a7b0';c.fillRect(30,100,180,20);
+  c.fillStyle='#f3d6c6';c.fillRect(40,120,160,130);
+  c.fillStyle='#9ec8f0';for(let x=0;x<3;x++)for(let y=0;y<2;y++)c.fillRect(54+x*48,140+y*36,26,20);
+  c.fillStyle='#8a5b6e';c.fillRect(100,200,40,50);
+  c.fillStyle='#6bb88a';[[16,236],[224,236]].forEach(([x,y])=>{c.beginPath();c.arc(x,y,16,0,7);c.fill()});
+  c.fillStyle='#8a5b3e';c.fillRect(13,248,6,20);c.fillRect(221,248,6,20);
+  $('gname').textContent=S.school.name;$('gtxt').textContent=S.school.intro;
+}
+
+/* ---------- stage ---------- */
+const st=$('cStage').getContext('2d');st.imageSmoothingEnabled=false;
+function nameTag(x,top,n){st.font='bold 10px sans-serif';const w=st.measureText(n).width+8;st.fillStyle='#0009';st.fillRect(x-w/2,top-14,w,12);st.fillStyle='#fff';st.textAlign='center';st.fillText(n,x,top-5);st.textAlign='start'}
+function drawStage(){
+  const L=G.loc,W=240;
+  const th=[['#fbe3ea','#d9b8a0'],['#e6e3f7','#b9b3d6'],['#9fd8f5','#c7c7d6'],['#3b3550','#2a2538'],['#f5efe0','#c9a98a'],['#bfe6a6','#8bc26b'],['#f4e2c4','#b3825a']][L];
+  const li=S.locs[L].img&&getImg(S.locs[L].img),hasImg=!!(li&&li.complete&&li.naturalWidth);
+  if(hasImg)st.drawImage(li,0,0,W,180);else{st.fillStyle=th[0];st.fillRect(0,0,W,120);st.fillStyle=th[1];st.fillRect(0,120,W,60)}
+  if(!hasImg&&L===0)[[20,70],[110,70],[180,70]].forEach(([x,y])=>{st.fillStyle='#8a5b3e';st.fillRect(x,y,44,6);st.fillStyle='#5b3a26';st.fillRect(x+4,y+6,4,14);st.fillRect(x+36,y+6,4,14)});
+  if(!hasImg&&L===1)for(let x=0;x<W;x+=24){st.fillStyle='#8fa6c9';st.fillRect(x+2,20,20,70);st.fillStyle='#4f6280';st.fillRect(x+2,50,20,2)}
+  if(!hasImg&&L===2){st.fillStyle='#ffffff55';st.beginPath();st.arc(190,30,14,0,7);st.fill();st.fillStyle='#777';st.fillRect(0,128,W,3)}
+  if(!hasImg&&L===3){st.fillStyle='#111';st.fillRect(60,70,120,30);for(let x=62;x<178;x+=6){st.fillStyle='#fff';st.fillRect(x,92,4,8)}}
+  if(!hasImg&&L===4){st.fillStyle='#8a5b3e';st.fillRect(170,40,4,80);st.fillStyle='#fff';st.fillRect(150,40,44,36)}
+  if(!hasImg&&L===5){st.fillStyle='#fff';st.fillRect(20,160,200,2);st.fillRect(120,120,2,60)}
+  if(!hasImg&&L===6)for(let x=0;x<W;x+=40){st.fillStyle='#8a5b3e';st.fillRect(x,40,36,80);for(let y=44;y<118;y+=14)for(let k=0;k<4;k++){st.fillStyle=['#e88','#8ce','#ec8','#9d9'][(x+y+k)%4];st.fillRect(x+3+k*8,y,5,10)}}
+  const pr=PRES[L],xs=pr.length===1?[150]:pr.length===2?[110,190]:[112,160,208];
+  const FEET=172,S4=4,TOP=FEET-20*S4;
+  sprite(st,0,38,FEET,S4,0,Math.floor(Date.now()/450)%2);nameTag(38,TOP,S.chars[0].name);
+  pr.forEach((i,k)=>{sprite(st,i,xs[k],FEET+(speak.i===i&&Date.now()<speak.until?-Math.abs(Math.sin(Date.now()/120))*4:0),S4);nameTag(xs[k],TOP,S.chars[i].name)});
+  st.font='bold 12px sans-serif';const lw=st.measureText(S.locs[L].n).width+12;
+  st.fillStyle='#0009';st.fillRect(6,6,lw,18);st.fillStyle='#fff';st.fillText(S.locs[L].n,12,20);
+  drawSweat();
+}
+
+let sweatT=0,drops=[],lastDrop=0,speak={i:-1,until:0},exState={i:-1,k:'',until:0},lastSpec=null;
+function flustered(ms){sweatT=Date.now()+ms;exState={i:0,k:'shy',until:Date.now()+ms}}
+function drawSweat(){
+  const now=Date.now();
+  if(now>sweatT){$('cStage').style.transform='';return}
+  $('cStage').style.transform=`translateX(${Math.sin(now/40)*1.5}px)`;
+  if(now-lastDrop>90){lastDrop=now;for(let k=0;k<4;k++)drops.push({x:(Math.random()<.5?20:50)+Math.random()*3,y:98+Math.random()*6,v:.8+Math.random()*.8})}
+  drops=drops.filter(d=>d.y<172);
+  drops.forEach(d=>{d.y+=d.v;d.v+=.05;const x=Math.round(d.x),y=Math.round(d.y);st.fillStyle='#2d7fb8';st.fillRect(x,y,3,4);st.fillStyle='#cdf2ff';st.fillRect(x,y,1,2)});
+  st.fillStyle='#fff';st.fillRect(60,60,30,16);st.fillStyle='#e0457b';st.font='bold 13px sans-serif';st.textAlign='center';st.fillText('!?',75,73);st.textAlign='start';
+}
+
+/* ---------- flow helpers ---------- */
+function flash(cb){$('fade').style.opacity=1;setTimeout(()=>{cb&&cb();$('fade').style.opacity=0},650)}
+function show(id){document.querySelectorAll('.scene').forEach(s=>s.classList.toggle('on',s.id===id))}
+function go(id,cb){flash(()=>{show(id);cb&&cb()})}
+function say(t,btns){$('txt').textContent=t;$('box').scrollTop=0;const b=$('btns');b.innerHTML='';b.className=(btns&&btns.length>1)?'choice':'';(btns||[]).forEach(x=>{const e=document.createElement('button');e.className='btn';e.textContent=x.l;e.onclick=()=>{sfx(660);x.f&&x.f()};b.appendChild(e)})}
+function seq(a,done){let i=0;const nx=()=>{if(i>=a.length)return done&&done();const t=a[i++];say(t,[{l:'다음 ▶',f:nx}])};nx()}
+const sumProgress=()=>PAIRS.reduce((a,[i,j])=>a+Math.min(G.aff[i][j],70),0);
+function updHud(){$('turnT').textContent=`남은 턴 ${G.turn} · ${S.locs[G.loc].n}`;$('barf').style.width=(sumProgress()/420*100)+'%';drawStage()}
+const allGood=()=>PAIRS.every(([i,j])=>G.aff[i][j]>=70);
+
+/* ---------- intro ---------- */
+function startAwake(){flustered(600000);
+  G.loc=0;updHud();
+  const sys=()=>say(`[ SYSTEM ]\n\nMISSION\n${S.mission}\n\n${S.fail}\n\n제한 턴: ${S.maxTurn}\n목표: 4명 모두의 서로에 대한 호감도를 70 이상으로\n\n[ 미션을 수락하시겠습니까? ]`,[
+    {l:'YES',f:()=>{sweatT=0;exState.until=0;seq(['좋아. 이제 시작이다.'],base)}},
+    {l:'NO',f:()=>say('바닷물이 발목을 감아옵니다.\n다시 선택하세요.',[{l:'다시 선택 ▶',f:sys}])}]);
+  seq(['…으윽. 차가운 물이 아직 몸에 달라붙어 있어.','여긴… 교실? 바다에 빠졌던 것 같은데…','(식은땀이 쉴 새 없이 흐른다. 심장이 쿵쾅거린다.)','으, 응?! 누, 누가 나를 봤어?! 아니, 그보다 나 왜 이렇게 젖어 있는 거야…!'],sys);
+}
+
+/* ---------- main loop ---------- */
+function base(msg){if(G.over)return;updHud();say(msg||`${S.locs[G.loc].n}에 있습니다. 무엇을 할까요?`,[{l:'💬 대화하기',f:talk},{l:'🚪 이동하기',f:moveMenu},{l:'👀 둘의 대화',f:chatTalk},...(EDIT?[{l:'✏ 대화 추가',f:addEv},{l:'✏ 둘의 대화 쓰기',f:editChat}]:[]),{l:'☰ 메뉴',f:openMenu}])}
+function parseEv(t){const out=[];let cur=null;(t||'').split('\n').forEach(raw=>{const s=raw.trim();if(!s)return;if(s==='---'){cur=null;return}if(s.startsWith('[대사]')||s.startsWith('[말]')){cur={line:s.slice(s.indexOf(']')+1).trim(),ch:[]};out.push(cur);return}if(cur&&s.startsWith('(')&&s.endsWith(')')){const p=s.slice(1,-1).split('|');cur.ch.push({t:(p[0]||'...').trim(),d:parseInt(p[1])||0,r:(p[2]||'').trim()})}});return out}
+function inlineEdit(title,val,onSave,back){
+  const t=$('txt');t.textContent=title+'\n';const ta=document.createElement('textarea');ta.value=val;ta.rows=7;ta.style.cssText='width:100%;font:inherit;font-size:14px;border:2px solid #3a2d3f;border-radius:6px;padding:6px;margin-top:6px;box-sizing:border-box';t.appendChild(ta);
+  const b=$('btns');b.innerHTML='';b.className='';
+  [['💾 저장',()=>{onSave(ta.value);saveNow();back()}],['취소',back]].forEach(([l,f])=>{const e=document.createElement('button');e.className='btn';e.textContent=l;e.onclick=()=>{sfx(660);f()};b.appendChild(e)});
+  ta.focus();
+}
+function evBlocks(c){return (c.events||'').split('---').map(b=>b.trim()).filter(b=>b&&parseEv(b).length)}
+function editEv(i,k){const c=S.chars[i],bl=evBlocks(c);inlineEdit('대사와 선택지를 고치세요 (형식: [대사] / (선택지|변화|반응) / ---)',bl[k]||'',v=>{bl[k]=v.trim();c.events=bl.filter(Boolean).join('\n---\n')},()=>{if(!talkEv())base()})}
+function addEv(){const p=PRES[G.loc],i=p[G.turn%p.length];inlineEdit('새 대화를 적으세요 (형식: [대사] / (선택지|변화|반응) / ---)','[대사] \n(선택지|5|반응)',v=>{const c=S.chars[i];c.events=[(c.events||'').trim(),v.trim()].filter(Boolean).join('\n---\n')},()=>base())}
+function parseScript(t){const out=[];let cur=[],opt=null;(t||'').split('\n').forEach(raw=>{const s=raw.trim();if(!s||s==='---'){if(cur.length)out.push(cur);cur=[];opt=null;return}const ind=raw.startsWith(' ')||raw.startsWith('\t');if(ind&&opt){opt.sub.push(parseLine(s));return}if(s.startsWith('>')){opt={ch:true,t:s.slice(1).trim(),sub:[]};cur.push(opt);return}opt=null;cur.push(parseLine(s))});if(cur.length)out.push(cur);return out}
+function parseLine(s){if(s.startsWith('※'))return {n:'',t:s.slice(1).trim()};const a=s.indexOf(':'),b=s.indexOf('：');const c=a<0?b:(b<0?a:Math.min(a,b));if(c>0&&c<=12)return {n:s.slice(0,c).trim(),t:s.slice(c+1).trim()};return {n:'',t:s}}
+function parseScriptV2(t){const out=[];let cur=[];(t||'').split('\n').forEach(raw=>{const s=raw.trim();if(!s||s==='---'){if(cur.length)out.push(cur);cur=[];return}if(s.startsWith('>')){cur.push({ch:true,t:s.slice(1).trim()});return}if(s.startsWith('※')){cur.push({n:'',t:s.slice(1).trim()});return}const a=s.indexOf(':'),b=s.indexOf('：');const c=a<0?b:(b<0?a:Math.min(a,b));if(c>0&&c<=12){cur.push({n:s.slice(0,c).trim(),t:s.slice(c+1).trim()})}else cur.push({n:'',t:s})});if(cur.length)out.push(cur);return out}
+function parseScriptOld(t){const out=[];let cur=[];(t||'').split('\n').forEach(raw=>{const s=raw.trim();if(!s||s==='---'){if(cur.length)out.push(cur);cur=[];return}if(s.startsWith('※')){cur.push({n:'',t:s.slice(1).trim()});return}const a=s.indexOf(':'),b=s.indexOf('：');const c=a<0?b:(b<0?a:Math.min(a,b));if(c>0&&c<=12){cur.push({n:s.slice(0,c).trim(),t:s.slice(c+1).trim()})}else cur.push({n:'',t:s})});if(cur.length)out.push(cur);return out}
+function playScene(sc,k,done,cur=-1){
+  if(k>=sc.length)return done();
+  const L=sc[k];
+  if(L.ch){
+    let j=k;const opts=[];while(j<sc.length&&sc[j].ch){opts.push(sc[j]);j++}
+    say('선택하세요.',opts.map(o=>({l:o.t,f:()=>{
+      if(cur>0)setAff(0,cur,5);G.turn--;updHud();
+      if(allGood())return ending(true,'네 사람 모두 서로를 좋아하게 되었습니다!');
+      if(G.turn<=0)return ending(false,S.fail);
+      say(S.chars[0].name+'\n“'+o.t+'”',[{l:'다음 ▶',f:()=>playScene(o.sub||[],0,()=>playScene(sc,j,done,cur),cur)}]);
+    }})));
+    return;
+  }
+  const si=L.n?S.chars.findIndex(c=>c.name===L.n):-1;
+  if(si>=0){speak={i:si,until:Date.now()+2200};cur=si}
+  say(L.n?(L.n+'\n“'+L.t+'”'):('※ '+L.t),[{l:'다음 ▶',f:()=>playScene(sc,k+1,done,cur)}]);
+}
+function playSceneV2(sc,k,done,cur=-1){
+  if(k>=sc.length)return done();
+  const L=sc[k];
+  if(L.ch){
+    const opts=[];let j=k;while(j<sc.length&&sc[j].ch){opts.push(sc[j].t);j++}
+    say('어떻게 답할까요?',opts.map(t=>({l:t,f:()=>{if(cur>0)setAff(0,cur,5);G.turn--;updHud();if(allGood())return ending(true,'네 사람 모두 서로를 좋아하게 되었습니다!');if(G.turn<=0)return ending(false,S.fail);say(S.chars[0].name+'\n“'+t+'”',[{l:'다음 ▶',f:()=>playScene(sc,j,done,cur)}])}})));
+    return;
+  }
+  const si=L.n?S.chars.findIndex(c=>c.name===L.n):-1;
+  if(si>=0){speak={i:si,until:Date.now()+2200};cur=si}
+  say(L.n?(L.n+'\n“'+L.t+'”'):('※ '+L.t),[{l:'다음 ▶',f:()=>playScene(sc,k+1,done,cur)}]);
+}
+function playSceneOld(sc,k,done){if(k>=sc.length)return done();const L=sc[k],si=L.n?S.chars.findIndex(c=>c.name===L.n):-1;if(si>=0)speak={i:si,until:Date.now()+2200};say(L.n?(L.n+'\n“'+L.t+'”'):('※ '+L.t),[{l:'다음 ▶',f:()=>playScene(sc,k+1,done)}])}
+function scriptTalk(){const p=PRES[G.loc],i=p[G.turn%p.length],c=S.chars[i],sc=parseScript(c.events);if(!sc.length)return false;const scene=sc[G.turn%sc.length],hasCh=scene.some(x=>x.ch);playScene(scene,0,()=>{if(hasCh)base();else choose(i)},i);return true}
+function scriptTalkOld(){const p=PRES[G.loc],i=p[G.turn%p.length],c=S.chars[i],sc=parseScript(c.events);if(!sc.length)return false;playScene(sc[G.turn%sc.length],0,()=>choose(i));return true}
+function choose(i){const c=S.chars[i],btns=[{l:'말을 건다',f:()=>react(i,6,'짧게 웃으며 대답해 준다.')},{l:'칭찬한다',f:()=>react(i,10,'칭찬에 얼굴이 살짝 붉어졌다.')},{l:'무시한다',f:()=>react(i,-6,'싸늘한 눈빛으로 자리를 떠난다.')}];if(PRES[G.loc].length>=2)btns.push({l:'둘을 이어준다',f:match});btns.push({l:'나중에',f:()=>base()});say(c.name+'에게 어떻게 할까요?',btns)}
+function chatTalk(){const bl=parseScript(S.chatter);if(!bl.length)return say('지금은 들리는 대화가 없어요. 설정에서 캐릭터끼리 대화를 써 주세요.',[{l:'← 돌아가기',f:()=>base()}]);const sc=bl[G.turn%bl.length];const ids=[...new Set(sc.map(l=>S.chars.findIndex(c=>c.name===l.n)).filter(x=>x>=0))];playScene(sc,0,()=>{if(ids.length>=2)setAff(ids[0],ids[1],3);base()})}
+function editChat(){inlineEdit('둘의 대화를 쓰세요 (이름: 대사, 빈 줄로 장면 구분)',S.chatter||'',v=>{S.chatter=v},()=>base())}
+function dateScene(i){const c=S.chars[i],sc=parseScript(c.dateScene||c.event).flat(),place=c.datePlace||'둘만의 장소';say('💕 '+place+'\n'+c.name+'와(과) 단둘이 떠난 시간',[{l:'다음 ▶',f:()=>playScene(sc.length?sc:[{n:'',t:'둘만의 특별한 시간이 흘렀다.'}],0,()=>base(),i)}])}
+function editMine(){const p=PRES[G.loc],i=p[G.turn%p.length];inlineEdit('대화를 글로 쓰세요. 이름: 대사 형식, 장면 사이는 빈 줄, 지문은 ※로',S.chars[i].events||'',v=>{S.chars[i].events=v},()=>base())}
+function talkEv(){const p=PRES[G.loc],i=p[G.turn%p.length],c=S.chars[i];const evs=parseEv(c.events);if(!evs.length)return false;const ev=evs[G.turn%evs.length],a=G.aff[0][i];speak={i,until:Date.now()+2500};exState={i,k:a>=60?'happy':a<30?'angry':'',until:Date.now()+60000};const btns=ev.ch.map(x=>({l:x.t,f:()=>react(i,x.d,x.r||'...')}));if(p.length>=2)btns.push({l:'둘을 이어준다 (+10)',f:match});if(EDIT)btns.push({l:'✏ 이 대사 고치기',f:()=>editEv(i,G.turn%evs.length)});btns.push({l:'← 취소',f:()=>base()});say(c.name+'\n"'+ev.line+'"',btns);return true}
+function talk(){if(talkEv())return;const p0=PRES[G.loc];speak={i:p0[G.turn%p0.length],until:Date.now()+2500};exState={i:speak.i,k:G.aff[0][speak.i]>=60?'happy':G.aff[0][speak.i]<30?'angry':'',until:Date.now()+60000};
+  const p=PRES[G.loc],i=p[G.turn%p.length],c=S.chars[i],a=G.aff[0][i];
+  const lines=(c.lines||'').split('\n').filter(x=>x.trim());
+  const line=lines.length?lines[G.turn%lines.length]:'…';
+  const tier=a<30?'경계':a<60?'친근':a<80?'설렘':'애정';
+  const btns=[
+    {l:'말을 건다 (+6)',f:()=>react(i,6,'짧게 웃으며 대답해 준다.')},
+    {l:'칭찬한다 (+10)',f:()=>react(i,10,'칭찬에 얼굴이 살짝 붉어졌다.')},
+    {l:'무시한다 (-6)',f:()=>react(i,-6,'싸늘한 눈빛으로 자리를 떠난다.')}];
+  if(p.length>=2)btns.push({l:'둘을 이어준다 (+10)',f:match});
+  btns.push({l:'← 취소',f:()=>base()});
+  say(`${c.name} (주인공과 ${tier} · 호감 ${a})\n"${line}"`,btns);
+}
+function setAff(i,j,d){const v=Math.max(0,Math.min(100,G.aff[i][j]+d));G.aff[i][j]=G.aff[j][i]=v;return v}
+function afterTurn(msg){
+  updHud();
+  if(allGood())return ending(true,'네 사람 모두 서로를 좋아하게 되었습니다!');
+  if(G.turn<=0)return ending(false,S.fail);
+  const sp=lastSpec;lastSpec=null;const bs=[{l:'계속 ▶',f:()=>base()}];if(sp&&sp[1]==='e')bs.splice(0,1,{l:'💕 둘이 함께 나가기 ▶',f:()=>dateScene(sp[0])});if(sp&&EDIT)bs.unshift({l:'✏ 이 장면 글 고치기',f:()=>inlineEdit(sp[1]==='e'?'특별 이벤트 대사를 적으세요':'비밀 내용을 적으세요',S.chars[sp[0]][sp[1]==='e'?'event':'secret']||'',v=>{S.chars[sp[0]][sp[1]==='e'?'event':'secret']=v},()=>base())});say(msg,bs);
+}
+function react(i,d,txt){if(d>0)flustered(2200);exState={i,k:d>0?'happy':d<0?'angry':'shy',until:Date.now()+3000};
+  const c=S.chars[i],before=G.aff[0][i];
+  const after=setAff(0,i,d);G.turn--;
+  let msg=`${d>0?'주인공의 얼굴이 새빨개졌다. 머릿속이 하얘져서 말이 꼬인다.\n':''}${c.name}: ${txt}`;
+  if(before<60&&after>=60&&!G.seen.includes(i+'s')){G.seen.push(i+'s');lastSpec=[i,'s'];msg+=`\n\n[ 비밀 해금 ]\n${c.secret||'(설정에서 비밀을 입력하세요)'}`}
+  if(before<80&&after>=80&&!G.seen.includes(i+'e')){G.seen.push(i+'e');lastSpec=[i,'e'];msg+=`\n\n[ 특별 이벤트 ]\n${c.name}와(과) 둘만의 데이트가 열렸습니다.`}
+  afterTurn(msg);
+}
+function match(){flustered(2200);
+  const p=PRES[G.loc],a=p[0],b=p[1];
+  const v=setAff(a,b,10);G.turn--;
+  afterTurn(`${S.chars[a].name}와 ${S.chars[b].name}가 서로 가까워졌다.`);
+}
+function moveMenu(){say('어디로 이동할까요? (1턴 소모)',S.locs.map((l,i)=>({l:l.n,f:()=>moveTo(i)})).concat([{l:'취소',f:()=>base()}]))}
+function moveTo(i){
+  G.loc=i;G.turn--;
+  if(G.turn<=0)return ending(false,S.fail);
+  flash(()=>base(`${S.locs[i].n}에 도착했다.\n${S.locs[i].d||''}`));
+}
+function ending(ok,msg){G.over=true;openPanel(ok?'★ 해피 엔딩':'☠ 배드 엔딩',`<div class="card">${esc(msg).replace(/\n/g,'<br>')}</div><button class="btn" onclick="restart()">처음부터 다시</button>`)}
+
+/* ---------- panels ---------- */
+function openPanel(title,html){$('panel').innerHTML=`<h2>${esc(title)}</h2>${html}<button class="btn" id="pclose">닫기</button>`;$('panel').classList.add('on');$('pclose').onclick=closePanel;$('panel').scrollTop=0}
+function closePanel(){$('panel').classList.remove('on')}
+function adminLogin(){if(EDIT){if(confirm('관리자 모드를 끄까요?')){EDIT=false;alert('관리자 모드가 꺼졌어요.')}closePanel();return}const v=prompt('관리자 비밀번호를 입력하세요');if(v===null)return;if(v===ADMIN_PW){EDIT=true;alert('관리자 모드가 켜졌어요. 이제 ✏ 버튼과 설정 메뉴가 보입니다.');closePanel();openMenu()}else alert('비밀번호가 맞지 않아요.')}
+function openMenu(){openPanel('☰ 메뉴',Object.keys(TITLES).filter(k=>EDIT||k!=='edit').map(k=>`<button class="btn" onclick="panelTo('${k}')">${TITLES[k]}</button>`).join(''))}
+const bar=(n,v)=>`<div class="card">${esc(n)} · 호감 ${v}/100<div style="height:12px;background:#0008;border:2px solid #fff;margin-top:4px"><div style="height:100%;width:${v}%;background:#f4a6b7"></div></div></div>`;
+const pairName=([i,j])=>`${S.chars[i].name} ↔ ${S.chars[j].name}`;
+function editForm(){
+  const inp=(k,l,t)=>{const v=getP(k)??'';return `<label>${l}</label>`+(t==='a'?`<textarea rows="2" data-k="${k}">${esc(v)}</textarea>`:`<input data-k="${k}" value="${esc(v)}">`)};
+  let h='<h3>게임 · 학교</h3>'+GF.map(([k,l,t])=>inp(k,l,t)).join('');
+  h+='<h3>시작 · 학교 · 장소 이미지</h3>'+inp('startLabel','START 버튼 글자','i')+'<label>START 버튼 이미지 (선택)</label><input type="file" accept="image/*" data-up="start">'+'<label>학교 정문 이미지 (선택)</label><input type="file" accept="image/*" data-up="school">'+S.locs.map((l,i)=>`<label>${esc(l.n)} 배경 이미지 (선택)</label><input type="file" accept="image/*" data-up="loc${i}">`).join('')+'<h3>장소 정보</h3>'+S.locs.map((l,i)=>inp(`locs.${i}.n`,`장소 ${i+1} 이름`,'i')+inp(`locs.${i}.d`,'장소 설명','a')).join('');
+  h+='<h3>캐릭터</h3>'+S.chars.map((c,i)=>`<div class="card"><b>${i?'캐릭터 '+(i+1):'주인공 (1번)'}</b>`+CF.map(([k,l,t])=>inp(`chars.${i}.${k}`,l,t)).join('')+`<label>외모: 머리 / 옷 / 피부 / 눈</label><input type="color" data-k="chars.${i}.hair" value="${c.hair}"><input type="color" data-k="chars.${i}.outfit" value="${c.outfit}"><input type="color" data-k="chars.${i}.skin" value="${c.skin}"><input type="color" data-k="chars.${i}.eye" value="${c.eye||'#2b2233'}"><label>${i?'이미지':'주인공 이미지 1 (기본)'}</label><input type="file" accept="image/*" data-img="${i}">${i?'':'<label>주인공 이미지 2 (1과 번갈아 나옴)</label><input type="file" accept="image/*" data-img2="0">'}<label>기쁨 표정 (호감이 높을 때)</label><input type="file" accept="image/*" data-ex="${i}:happy"><label>부끄러움·당황 표정</label><input type="file" accept="image/*" data-ex="${i}:shy"><label>화남 표정 (호감이 낮을 때)</label><input type="file" accept="image/*" data-ex="${i}:angry">${c.img?'<label>✔ 이미지 적용됨</label>':''}</div>`).join('');
+  return h;
+}
+function panelTo(k){if(k==='admin'){adminLogin();return}if(k==='edit'&&!EDIT)return;
+  let h='';
+  if(k==='dex')h=S.chars.map((c,i)=>`<div class="card"><canvas data-i="${i}" width="64" height="80" style="float:left;margin-right:10px;width:64px;height:80px;background:#fff2"></canvas><b>${esc(c.name)}</b> ${i?'· 주인공과 호감 '+G.aff[0][i]:'· 주인공'}<br>${esc(c.age)} ${esc(c.grade)}<br>${esc(c.intro)}<br><small>말투: ${esc(c.speech)}</small></div>`).join('');
+  if(k==='school')h=`<div class="card"><b>${esc(S.school.name)}</b><br>${esc(S.school.intro)}</div>`+[['history','학교의 역사'],['atmos','분위기'],['rules','교칙'],['cautions','주의사항'],['grades','학년 및 반'],['special','특별실'],['clubs','동아리'],['council','학생회'],['teachers','선생님']].map(([x,l])=>`<div class="card"><b>${l}</b><br>${esc(S.school[x]).replace(/\n/g,'<br>')}</div>`).join('')+'<h3>장소</h3>'+S.locs.map(l=>`<div class="card"><b>${esc(l.n)}</b><br>${esc(l.d)}</div>`).join('');
+  if(k==='mission')h=`<div class="card">${esc(S.mission)}<br><br>${esc(S.fail)}<br><br>남은 턴 <b>${G.turn}</b> / ${S.maxTurn}</div>`+PAIRS.map(p=>bar(pairName(p),G.aff[p[0]][p[1]])).join('');
+  if(k==='rel')h=PAIRS.map(p=>bar(pairName(p),G.aff[p[0]][p[1]])).join('')+`<div class="card">${esc(S.rel).replace(/\n/g,'<br>')||'설정 → 캐릭터 간 관계 메모에서 입력하세요.'}</div>`;
+  if(k==='save')h=`<div class="card">진행 상황을 저장하거나 불러옵니다. 설정은 자동으로 브라우저에 저장됩니다.</div><button class="btn" onclick="saveG()">💾 저장</button><button class="btn" onclick="loadG()">📂 불러오기</button><button class="btn" onclick="restart()">↺ 새 게임</button>`;
+  if(k==='edit')h=editForm()+`<button class="btn" onclick="applySettings()">💾 적용 및 저장</button><button class="btn" onclick="resetS()">기본값 복원</button>`;
+  openPanel(TITLES[k],h);
+  if(k==='dex')document.querySelectorAll('#panel canvas[data-i]').forEach(cv=>{const x=cv.getContext('2d');x.imageSmoothingEnabled=false;sprite(x,+cv.dataset.i,32,76,3)});
+}
+function applySettings(){
+  document.querySelectorAll('#panel [data-k]').forEach(el=>{let v=el.value;if(el.dataset.k==='maxTurn')v=parseInt(v)||60;setP(el.dataset.k,v)});
+  saveNow();loadImgs();$('ttl').textContent=S.title;applyStart();drawGate();drawStage();
+  alert('저장되었습니다. 새로고침해도 유지됩니다.');
+}
+function resetS(){if(confirm('설정을 기본값으로 되돌릴까요?')){localStorage.removeItem(KEY);location.reload()}}
+$('panel').addEventListener('change',e=>{
+  const el=e.target;if(el.dataset.img==null||!el.files[0])return;const i=+el.dataset.img;
+  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+    const cv=document.createElement('canvas');cv.width=128;cv.height=160;const x=cv.getContext('2d');
+    const sw=im.width*.34,sh=im.height*.62,k=Math.min(128/sw,160/sh);
+    x.drawImage(im,0,0,sw,sh,(128-sw*k)/2,(160-sh*k)/2,sw*k,sh*k);
+    S.chars[i].img=cv.toDataURL('image/png');loadImgs();alert('이미지가 적용되었습니다. 저장을 눌러 유지하세요.');
+  };im.src=r.result};r.readAsDataURL(el.files[0]);
+});
+
+function cropChar(im){const cv=document.createElement('canvas');cv.width=128;cv.height=160;const x=cv.getContext('2d');const sw=im.width*.34,sh=im.height*.62,k=Math.min(128/sw,160/sh);x.drawImage(im,0,0,sw,sh,(128-sw*k)/2,(160-sh*k)/2,sw*k,sh*k);return cv.toDataURL('image/png')}
+function fitImg(im,max){const k=Math.min(1,max/Math.max(im.width,im.height));const cv=document.createElement('canvas');cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);return cv.toDataURL('image/jpeg',.85)}
+function saveNow(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('저장 공간이 부족합니다. 이미지를 조금 줄여 주세요.')}}
+$('panel').addEventListener('change',e=>{
+  const el=e.target,f=el.files&&el.files[0];if(!f)return;
+  const up=el.dataset.up,f2=el.dataset.img2!=null,ex=el.dataset.ex;if(!up&&!f2&&!ex)return;
+  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+    if(ex){const[ci,k]=ex.split(':');S.chars[+ci].ex=S.chars[+ci].ex||{};S.chars[+ci].ex[k]=cropChar(im)}
+    else if(f2)S.chars[0].img2=cropChar(im);
+    else if(up==='start')S.startImg=fitImg(im,400);
+    else if(up==='school')S.school.img=fitImg(im,600);
+    else S.locs[+up.slice(3)].img=fitImg(im,600);
+    saveNow();applyStart();drawGate();drawStage();alert('이미지가 적용되었습니다.');
+  };im.src=r.result};r.readAsDataURL(f);
+});
+/* ---------- save / load ---------- */
+function saveG(){localStorage.setItem(SKEY,JSON.stringify(G));alert('저장되었습니다.')}
+function loadG(){const v=localStorage.getItem(SKEY);if(!v)return alert('저장된 데이터가 없습니다.');G=JSON.parse(v);closePanel();flash(()=>{show('main');updHud();base('저장한 지점에서 다시 시작합니다.')})}
+function restart(){G=newG();closePanel();flash(()=>{show('main');startAwake()})}
+
+/* ---------- init ---------- */
+$('ttl').textContent=S.title;loadImgs();drawGate();applyStart();
+$('sea').addEventListener('pointerdown',()=>{ambient();$('hint').style.display='none'});
+const BGM={on:false,g:null,t:0,i:0};
+const CHORDS=[[261.6,329.6,392],[220,261.6,329.6],[174.6,220,261.6],[196,246.9,293.7]];
+const MEL=[659.3,0,784,659.3,0,587.3,0,523.3,587.3,0,659.3,0,523.3,0,0,0];
+function tone(f,t,d,type,vol,dst){const a=ac(),o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.04);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(dst);o.start(t);o.stop(t+d+.05)}
+function bgmStart(){
+  if(BGM.on)return;BGM.on=true;const a=ac();
+  BGM.g=a.createGain();BGM.g.gain.value=0;BGM.g.gain.linearRampToValueAtTime(.5,a.currentTime+2);BGM.g.connect(a.destination);
+  BGM.t=a.currentTime+.1;BGM.i=0;
+  setInterval(()=>{const now=ac().currentTime;while(BGM.t<now+.6){const step=BGM.i%16,bar=Math.floor(BGM.i/4)%4;if(step%4===0)CHORDS[bar].forEach(f=>tone(f,BGM.t,1.9,'sine',.05,BGM.g));if(MEL[step])tone(MEL[step],BGM.t,.5,'triangle',.12,BGM.g);BGM.t+=.25;BGM.i++}},150);
+}
+function seaFade(){if(ambG){ambG.gain.setTargetAtTime(0,ac().currentTime,.4)}}
+$('startBtn').onclick=()=>{sfx(880);seaFade();bgmStart();go('gate',drawGate)};
+$('enterBtn').onclick=()=>{sfx(660);go('main',startAwake)};
+$('menuBtn').onclick=openMenu;
+setTimeout(()=>$('startBtn').style.opacity=1,1500);
+setInterval(()=>{if($('main').classList.contains('on'))drawStage()},130);
+requestAnimationFrame(drawSea);
+</script></body></html>
